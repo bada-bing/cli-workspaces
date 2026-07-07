@@ -196,6 +196,13 @@ export default function Command() {
                   }}
                 />
                 <Action
+                  title="Open in Zed"
+                  icon={{ fileIcon: "/Applications/Zed.app" }}
+                  onAction={() => {
+                    execSync(`zed "${sessionDir(session)}"`, { env: ENV });
+                  }}
+                />
+                <Action
                   title="Open in Split"
                   icon={{ fileIcon: "/Applications/Ghostty.app" }}
                   shortcut={{ modifiers: ["cmd"], key: "d" }}
@@ -208,13 +215,6 @@ export default function Command() {
                     }
                     await popToRoot();
                     await closeMainWindow();
-                  }}
-                />
-                <Action
-                  title="Open in Zed"
-                  icon={{ fileIcon: "/Applications/Zed.app" }}
-                  onAction={() => {
-                    execSync(`zed "${sessionDir(session)}"`, { env: ENV });
                   }}
                 />
               </ActionPanel>
