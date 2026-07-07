@@ -1,0 +1,50 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "cli-workspaces",
+  "title": "CLI Workspaces",
+  "description": "Focus or open CLI workspaces (tmux sessions) in your terminal emulator. If the session is already visible in a window, that window is focused. Otherwise a new window is opened and attached to the session (creating it if needed).",
+  "icon": "command-icon.png",
+  "author": "bada-bing",
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "preferences": [
+    {
+      "name": "sessions",
+      "type": "textfield",
+      "title": "Sessions",
+      "description": "Comma-separated session names, a JSON array of names, or a path to a JSON file. JSON array items can be strings or objects with { \"name\": string, \"description\"?: string }.",
+      "placeholder": "work, personal, side-project",
+      "required": true
+    }
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "open",
+      "title": "Open Session",
+      "description": "Focus or open a CLI workspace (tmux session) in your terminal",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "1.78.1"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.8",
+    "@types/node": "20.8.10",
+    "@types/react": "18.3.3",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "prepublishOnly": "echo \"\\n\\nIt seems like you are trying to publish the Raycast extension to npm.\\n\\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\\n\\n\" && exit 1",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
