@@ -66,12 +66,12 @@ function activeSessionName(): string | null {
   return null;
 }
 
-function sessionExists(name: string): boolean {
+function listExistingSessions(): Set<string> {
   try {
-    execSync(`${TMUX} has-session -t=${name} 2>/dev/null`, { env: ENV });
-    return true;
+    const out = execSync(`${TMUX} list-sessions -F '#{session_name}' 2>/dev/null`, { env: ENV }).toString();
+    return new Set(out.trim().split("\n").filter(Boolean));
   } catch {
-    return false;
+    return new Set();
   }
 }
 
@@ -82,7 +82,7 @@ function sessionDir(session: Session): string {
 function openSession(session: Session): void {
   const dir = sessionDir(session);
 
-  if (!sessionExists(session.name)) {
+  if (!listExistingSessions().has(session.name)) {
     execSync(`${TMUX} new-session -d -s ${session.name} -c "${dir}"`, { env: ENV });
     if (existsSync(BOOTSTRAP)) {
       execSync(`bash "${BOOTSTRAP}" ${session.name} "${dir}"`, { env: ENV });
@@ -110,10 +110,11 @@ export default function Command() {
 
   const sessions = parseSessions();
   const active = activeSessionName();
+  const existing = listExistingSessions();
   const statuses: Record<string, SessionStatus> = {};
   for (const s of sessions) {
     if (s.name === active) statuses[s.name] = "active";
-    else if (sessionExists(s.name)) statuses[s.name] = "exists";
+    else if (existing.has(s.name)) statuses[s.name] = "exists";
     else statuses[s.name] = "new";
   }
 
