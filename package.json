@@ -11,11 +11,12 @@
   ],
   "preferences": [
     {
-      "name": "sessions",
+      "name": "sessionsFile",
       "type": "textfield",
-      "title": "Sessions",
-      "description": "Comma-separated session names, a JSON array of names, or a path to a JSON file. JSON array items can be strings or objects with { \"name\": string, \"description\"?: string }.",
-      "placeholder": "work, personal, side-project",
+      "title": "Sessions File",
+      "description": "Path to a JSON file containing the list of sessions. Items can be strings or objects with { \"name\": string, \"description\"?: string, \"dir\"?: string }.",
+      "placeholder": "~/Developer/toolbox/private/env/raycast/cli-workspaces.json",
+      "default": "~/Developer/toolbox/private/env/raycast/cli-workspaces.json",
       "required": true
     }
   ],

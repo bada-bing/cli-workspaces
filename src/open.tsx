@@ -23,18 +23,10 @@ const ENV = { PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" };
 // ─── config ───────────────────────────────────────────────────────────────────
 
 function parseSessions(): Session[] {
-  const { sessions } = getPreferenceValues<ExtensionPreferences>();
-  try {
-    const parsed = JSON.parse(sessions);
-    if (Array.isArray(parsed)) return parsed.map((s) => (typeof s === "string" ? { name: s } : s));
-  } catch {
-    // not JSON
-  }
-  return sessions
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((name) => ({ name }));
+  const { sessionsFile } = getPreferenceValues<ExtensionPreferences>();
+  const filePath = sessionsFile.trim().replace(/^~/, HOME);
+  const parsed = JSON.parse(readFileSync(filePath, "utf-8"));
+  return parsed.map((s: string | Session) => (typeof s === "string" ? { name: s } : s));
 }
 
 // ─── tmux ─────────────────────────────────────────────────────────────────────

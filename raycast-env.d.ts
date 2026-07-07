@@ -8,8 +8,8 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 type ExtensionPreferences = {
-  /** Sessions - Comma-separated session names, a JSON array of names, or a path to a JSON file. JSON array items can be strings or objects with { "name": string, "description"?: string }. */
-  "sessions": string
+  /** Sessions File - Path to a JSON file containing the list of sessions. Items can be strings or objects with { "name": string, "description"?: string, "dir"?: string }. */
+  "sessionsFile": string
 }
 
 /** Preferences accessible in all the extension's commands */
