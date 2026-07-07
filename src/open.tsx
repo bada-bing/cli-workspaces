@@ -7,7 +7,8 @@ import { join } from "path";
 interface Session {
   name: string;
   description?: string;
-  dir?: string; // working directory for new sessions; defaults to ~/Developer/src/<name>
+  dir?: string;
+  color?: string;
 }
 
 type SessionStatus = "active" | "exists" | "new";
@@ -129,7 +130,7 @@ export default function Command() {
         return (
           <List.Item
             key={session.name}
-            icon="list-icon.png"
+            icon={session.color ? { source: "list-icon.png", tintColor: session.color } : "list-icon.png"}
             title={session.name}
             subtitle={session.description}
             accessories={[badge]}
