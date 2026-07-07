@@ -74,8 +74,12 @@ function sessionExists(name: string): boolean {
   }
 }
 
+function sessionDir(session: Session): string {
+  return session.dir ?? join(HOME, "Developer", "src", session.name);
+}
+
 function openSession(session: Session): void {
-  const dir = session.dir ?? join(HOME, "Developer", "src", session.name);
+  const dir = sessionDir(session);
 
   if (!sessionExists(session.name)) {
     execSync(`${TMUX} new-session -d -s ${session.name} -c "${dir}"`, { env: ENV });
@@ -133,7 +137,7 @@ export default function Command() {
               <ActionPanel>
                 <Action
                   title="Switch to Session"
-                  icon={Icon.Terminal}
+                  icon={{ fileIcon: "/Applications/Ghostty.app" }}
                   onAction={async () => {
                     try {
                       openSession(session);
@@ -143,6 +147,13 @@ export default function Command() {
                     }
                     await popToRoot();
                     await closeMainWindow();
+                  }}
+                />
+                <Action
+                  title="Open in Zed"
+                  icon={{ fileIcon: "/Applications/Zed.app" }}
+                  onAction={() => {
+                    execSync(`zed "${sessionDir(session)}"`, { env: ENV });
                   }}
                 />
               </ActionPanel>
