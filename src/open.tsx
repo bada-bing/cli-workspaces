@@ -1,8 +1,20 @@
-import { Action, ActionPanel, Color, Icon, List, closeMainWindow, getPreferenceValues, popToRoot, showToast, Toast } from "@raycast/api";
-import { execSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  List,
+  closeMainWindow,
+  getPreferenceValues,
+  popToRoot,
+  showToast,
+  Toast,
+} from "@raycast/api";
+import { execFile, execSync } from "child_process";
+import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { useEffect, useMemo, useState } from "react";
 
 interface Session {
   name: string;
@@ -17,8 +29,6 @@ const HOME = homedir();
 const TMUX = "/opt/homebrew/bin/tmux";
 const BOOTSTRAP = `${HOME}/Developer/toolbox/scripts/local_development/tmux.bootstrap.sh`;
 const WA2_ENV = `${HOME}/Developer/src/raycast-extensions/wa-2/.env`;
-const STATE_DIR = join(HOME, ".local", "share", "cli-workspaces");
-const ACTIVE_SESSION_FILE = join(STATE_DIR, "active-session");
 const ENV = { PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" };
 
 // ─── config ───────────────────────────────────────────────────────────────────
@@ -32,38 +42,39 @@ function parseSessions(): Session[] {
 
 // ─── tmux ─────────────────────────────────────────────────────────────────────
 
-/**
- * Installs a tmux hook that writes the current session name to a file on every
- * client-session-changed event. This covers all ways of switching sessions:
- * switch-client, choose-session, this extension, tmux_sessionizer, etc.
- * The hook persists for the lifetime of the tmux server; we re-register it on
- * each command open so it survives server restarts.
- */
-function ensureHook(): void {
+/** Sessions with at least one attached client, most recently active client first. */
+function attachedSessions(): { name: string; activity: number }[] {
   try {
-    if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
-    execSync(
-      `${TMUX} set-hook -g client-session-changed 'run-shell "echo \#{session_name} > ${ACTIVE_SESSION_FILE}"'`,
-      { env: ENV }
-    );
+    const out = execSync(`${TMUX} list-clients -F '#{client_activity} #{session_name}' 2>/dev/null`, { env: ENV })
+      .toString()
+      .trim();
+    if (!out) return [];
+    return out
+      .split("\n")
+      .map((line) => {
+        const [activity, name] = line.split(" ");
+        return { name, activity: Number(activity) };
+      })
+      .sort((a, b) => b.activity - a.activity);
   } catch {
-    // tmux not running yet — ignore
+    return [];
   }
 }
 
-function activeSessionName(): string | null {
-  if (existsSync(ACTIVE_SESSION_FILE)) {
-    const name = readFileSync(ACTIVE_SESSION_FILE, "utf-8").trim();
-    if (name) return name;
-  }
-  // Fallback for first run before the hook has ever fired: ask tmux directly.
-  // With one Ghostty window there is exactly one client, so this is unambiguous.
-  try {
-    const name = execSync(`${TMUX} list-clients -F '#{session_name}' 2>/dev/null`, { env: ENV })
-      .toString().trim().split("\n")[0];
-    if (name) return name;
-  } catch { /* ignore */ }
-  return null;
+/**
+ * Session name of the macOS-focused Ghostty tile, delivered asynchronously
+ * (osascript costs ~150ms — too slow for the render path). tmux titles each
+ * terminal with its session name (set-titles-string "#S" in tmux.conf), so
+ * Ghostty's focused-terminal title is the session — even when focus moved by
+ * mouse click, which tmux itself cannot observe.
+ */
+function focusedGhosttySession(callback: (name: string | null) => void): void {
+  execFile(
+    "osascript",
+    ["-e", 'tell application "Ghostty" to name of focused terminal of selected tab of front window'],
+    { env: ENV },
+    (err, stdout) => callback(err ? null : stdout.trim() || null)
+  );
 }
 
 function listExistingSessions(): Set<string> {
@@ -79,38 +90,71 @@ function sessionDir(session: Session): string {
   return session.dir ?? join(HOME, "Developer", "src", session.name);
 }
 
-function openSession(session: Session): void {
+function ensureSession(session: Session): void {
   const dir = sessionDir(session);
-
   if (!listExistingSessions().has(session.name)) {
     execSync(`${TMUX} new-session -d -s ${session.name} -c "${dir}"`, { env: ENV });
     if (existsSync(BOOTSTRAP)) {
       execSync(`bash "${BOOTSTRAP}" ${session.name} "${dir}"`, { env: ENV });
     }
   }
+}
 
-  execSync(`${TMUX} switch-client -t ${session.name} 2>/dev/null || true`, { env: ENV });
-
-  // switch-client triggers the hook asynchronously; write the file ourselves
-  // immediately so the next open reflects the correct state without any race.
-  if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
-  writeFileSync(ACTIVE_SESSION_FILE, session.name, "utf-8");
-
+function syncActiveProject(name: string): void {
   if (existsSync(WA2_ENV)) {
-    execSync(`sed -i '' "s/^ACTIVE_PROJECT=.*/ACTIVE_PROJECT=${session.name}/" "${WA2_ENV}"`, { env: ENV });
+    execSync(`sed -i '' "s/^ACTIVE_PROJECT=.*/ACTIVE_PROJECT=${name}/" "${WA2_ENV}"`, { env: ENV });
   }
+}
 
+function openSession(session: Session): void {
+  ensureSession(session);
+  execSync(`${TMUX} switch-client -t ${session.name} 2>/dev/null || true`, { env: ENV });
+  syncActiveProject(session.name);
   execSync(`osascript -e 'tell application "Ghostty" to activate'`, { env: ENV });
+}
+
+/**
+ * Opens the session in a new Ghostty split (like Cmd+D), attached as its own
+ * tmux client. Uses Ghostty's native AppleScript dictionary (1.3+) — no
+ * System Events keystroke faking, so it works from a Raycast subprocess.
+ */
+function openSessionInSplit(session: Session): void {
+  ensureSession(session);
+  const script = `
+    tell application "Ghostty"
+      activate
+      set cfg to new surface configuration
+      set command of cfg to "${TMUX} new-session -A -s ${session.name}"
+      if (count of windows) is 0 then
+        new window with configuration cfg
+      else
+        split (focused terminal of selected tab of front window) direction right with configuration cfg
+      end if
+    end tell`;
+  execSync("osascript", { env: ENV, input: script });
+  syncActiveProject(session.name);
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function Command() {
-  ensureHook();
+  const sessions = useMemo(parseSessions, []);
+  const existing = useMemo(listExistingSessions, []);
+  const attached = useMemo(attachedSessions, []);
 
-  const sessions = parseSessions();
-  const active = activeSessionName();
-  const existing = listExistingSessions();
+  // Initial guess: the most recently active tmux client's session —
+  // switch-client targets it, typing bumps it, and a fresh split client
+  // starts with attach-time activity. The focused Ghostty tile (which also
+  // sees mouse-driven focus changes) is authoritative and corrects the badge
+  // when the async osascript query lands, validated against sessions that
+  // actually have a client in case the focused tile isn't running tmux.
+  const [active, setActive] = useState<string | null>(attached[0]?.name ?? null);
+  useEffect(() => {
+    focusedGhosttySession((focused) => {
+      if (focused && attached.some((s) => s.name === focused)) setActive(focused);
+    });
+  }, []);
+
   const statuses: Record<string, SessionStatus> = {};
   for (const s of sessions) {
     if (s.name === active) statuses[s.name] = "active";
@@ -143,6 +187,21 @@ export default function Command() {
                   onAction={async () => {
                     try {
                       openSession(session);
+                    } catch (e) {
+                      await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
+                      return;
+                    }
+                    await popToRoot();
+                    await closeMainWindow();
+                  }}
+                />
+                <Action
+                  title="Open in Split"
+                  icon={{ fileIcon: "/Applications/Ghostty.app" }}
+                  shortcut={{ modifiers: ["cmd"], key: "d" }}
+                  onAction={async () => {
+                    try {
+                      openSessionInSplit(session);
                     } catch (e) {
                       await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
                       return;
