@@ -217,6 +217,14 @@ export default function Command() {
                     await closeMainWindow();
                   }}
                 />
+                <Action
+                  title="Open in Finder"
+                  icon={{ fileIcon: "/Applications/Finder.app" }}
+                  shortcut={{ modifiers: ["cmd"], key: "o" }}
+                  onAction={() => {
+                    execSync(`open -a Finder "${sessionDir(session)}"`, { env: ENV });
+                  }}
+                />
               </ActionPanel>
             }
           />
